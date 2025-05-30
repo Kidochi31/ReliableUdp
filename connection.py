@@ -9,11 +9,8 @@ class Connection:
     # remote_endpoint: IP_endpoint - the destination of the sockets
     # closed: bool - whether the connection has been closed
 
-    def __init__(self, tcp_socket: socket, udp_socket: UdpSocket):
-        self.tcp_socket = tcp_socket
+    def __init__(self, udp_socket: UdpSocket, ):
         self.udp_socket = udp_socket
-        self.local_endpoint = get_canonical_local_endpoint(tcp_socket)
-        self.remote_endpoint = get_canonical_remote_endpoint(tcp_socket)
         self.closed = False
     
     def close(self):

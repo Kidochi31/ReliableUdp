@@ -40,9 +40,8 @@ class Server:
                  port: int = 0):
         # create a TCP socket that will listen for incoming connections
         self.family = family
-        self.listener = Listener(family, listen, port)
-        self.local_endpoint = self.listener.get_local_endpoint()
-        self.udp_socket = UdpSocket(self.local_endpoint, stun_hosts, family)
+        self.udp_socket = UdpSocket(port, stun_hosts, family)
+        self.local_endpoint = self.udp_socket.get_local_endpoint()
         self.holepuncher = HolePuncher(self.local_endpoint, family)
         self.connections = ConnectionCollection()
         self.lock = Lock()
