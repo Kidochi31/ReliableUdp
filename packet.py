@@ -49,12 +49,12 @@ class PayloadType(Enum):
     UNRELIABLE = 1
     NO_PAYLOAD = 2
 
-def interpret_packet(packet: bytes | None) -> tuple[PayloadType, int | None, int | None, bool, bytes | None]:
+def interpret_packet(packet: bytes | None) -> tuple[PayloadType, int | None, int | None, bool, bytes]:
     """
     Returns (PayloadType, seq?, ack?, final, payload?)
     """
     if packet is None or len(packet) < 4: # corrupted, incorrect, or keep alive packet
-        return (PayloadType.NO_PAYLOAD, None, None, False, None)
+        return (PayloadType.NO_PAYLOAD, None, None, False, b'')
     flags = packet[3]
     reliable = (flags & (1 << RELIABLE_BIT)) != 0
     unreliable = (flags & (1 << UNRELIABLE_BIT)) != 0
@@ -70,8 +70,8 @@ def interpret_packet(packet: bytes | None) -> tuple[PayloadType, int | None, int
         packet = packet[4:]
     # now packet is at the beginning of the payload
     if len(packet) == 0:
-        packet = None
-    type = (PayloadType.NO_PAYLOAD if (packet is None)
-            else (PayloadType.RELIABLE if reliable
-                  else (PayloadType.UNRELIABLE)))
+        packet = b''
+    type = (PayloadType.RELIABLE if reliable
+            else (PayloadType.UNRELIABLE if unreliable
+                  else (PayloadType.NO_PAYLOAD)))
     return (type, seq, ack, final, packet)

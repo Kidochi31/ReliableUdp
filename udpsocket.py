@@ -38,8 +38,7 @@ class UdpSocket:
         while self._ready_to_receive():
             try:
                 data, endpoint = self.socket.recvfrom(BUFSIZE)
-                if data != b'':
-                    result.append((data, get_canonical_endpoint(endpoint, self.socket.family)))
+                result.append((data, get_canonical_endpoint(endpoint, self.socket.family)))
             except:
                 break
         return result

@@ -1,7 +1,8 @@
-from tcpudpserver import *
-from threading import Thread
+from rudpserver import *
+from threading import Thread#, enumerate
 import traceback
 from iptools import IP_endpoint
+#import time
 
 should_quit = None
 
@@ -23,6 +24,13 @@ def main():
     print(f"ExternalAddress: {server.get_external_endpoint()}")
     print(f"LANAddress: {server.get_lan_endpoint()}")
     print(f"LoopbackAddress: {server.get_loopback_endpoint()}")
+    # text = input()
+    # if text.startswith("holepunch "):
+    #     text = text.removeprefix("holepunch ")
+    #     address, port = text.split(":", maxsplit=1)
+    #     port = int(port)
+    #     endpoint = (address, port)
+    #     server.hole_punch(endpoint, None)
 
     def tick_func():
         while not server.closed:
@@ -51,11 +59,15 @@ def main():
             else:
                 for connection in connections:
                     connection.send_reliable(text.encode())
-    except BaseException as e:
+    except BaseException:
         print(f"\nException in main loop: {traceback.format_exc()}")
         server.close()
     
     print("Main Thread Ended")
+    # while True:
+    #     time.sleep(1)
+    #     for thread in enumerate():
+    #         print(thread.name)
 
 def on_receive_reliable(server: Server, data: bytes, connection: Connection):
     print(f"from {connection.remote_endpoint}: {data.decode()}")

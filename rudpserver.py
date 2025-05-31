@@ -1,7 +1,6 @@
 from socket import socket
 from threading import Lock
 from holepuncher import HolePuncher
-from listener import Listener
 from connection import Connection
 from collections.abc import Callable
 from udpsocket import UdpSocket
@@ -42,8 +41,8 @@ class Server:
         self.family = family
         self.udp_socket = UdpSocket(port, stun_hosts, family)
         self.local_endpoint = self.udp_socket.get_local_endpoint()
-        self.holepuncher = HolePuncher(self.local_endpoint, family)
-        self.connections = ConnectionCollection()
+        self.holepuncher = HolePuncher(self.udp_socket)
+        self.connections = ConnectionCollection(self.udp_socket)
         self.lock = Lock()
         self.closed = False
 
@@ -106,61 +105,41 @@ class Server:
             return get_canonical_local_endpoint(s)
         except Exception:
             return None
-
-    def _manage_new_connection(self, socket: socket)-> Connection | None:
-        connection = self.connections.add_connection(socket, self.udp_socket)
-        if connection is None:
-            return None
-        self.holepuncher.remove_hole_puncher(connection.remote_endpoint)
-        return connection
     
     def tick(self):
         try:
             hole_punch_fails: list[IP_endpoint] = []
             new_connections: list[Connection] = []
-            disconnects: list[Connection] = []
+            disconnections: list[Connection] = []
             receive_unreliable: list[tuple[bytes, Connection]] = []
             receive_reliable: list[tuple[bytes, Connection]] = []
             with self.lock:
                 if self.closed:
                     return
                 # first manage all hole punch failures
+                self.holepuncher.tick()
                 for endpoint in self.holepuncher.take_fails():
                     hole_punch_fails.append(endpoint)
                 
-                # next manage all successful connections
-                for socket in self.holepuncher.take_successes():
-                    connection = self._manage_new_connection(socket)
-                    if connection is not None:
-                        new_connections.append(connection)
-                for socket in self.listener.take_new_connections():
-                    connection = self._manage_new_connection(socket)
-                    if connection is not None:
-                        new_connections.append(connection)
-                
-                # next read new data (but don't manage yet)
-                unreliable_data = self.udp_socket.receive()
-                reliable_data = self.connections.receive()
+                # receive data (but don't manage yet)
+                data = self.udp_socket.receive()
 
-                # manage all disconnections
-                for connection in self.connections.take_disconnections():
-                    disconnects.append(connection)
+                # let connections know, and get refined data
+                new_connections, disconnections, receive_reliable, receive_unreliable = self.connections.report_received_data(data)
                 
-                # manage new data
-                for data, endpoint in unreliable_data:
-                    if endpoint is None or endpoint not in self.connections:
-                        continue
-                    connection = self.connections[endpoint]
-                    receive_unreliable.append((data, connection))
-                for data, endpoint in reliable_data:
-                    connection = self.connections[endpoint]
-                    receive_reliable.append((data, connection))
+                # remove all new connections from hole puncher
+                for connection in new_connections:
+                    self.holepuncher.remove_hole_puncher(connection.remote_endpoint)
+                
+                # tick the connections to send data, and get new disconnections
+                more_disconnections = self.connections.tick_and_get_disconnections()
+                disconnections.extend(more_disconnections)
             # end of lock
             for endpoint in hole_punch_fails:
                 self.on_hole_punch_fail(self, endpoint)
             for connection in new_connections:
                 self.on_connect(self, connection)
-            for connection in disconnects:
+            for connection in disconnections:
                 self.on_disconnect(self, connection)
             for data, connection in receive_unreliable:
                 self.on_receive_unreliable(self, data, connection)
@@ -176,7 +155,9 @@ class Server:
             if self.closed:
                 return
             self.closed = True
-            self.listener.close()
-            self.holepuncher.clear()
-            self.udp_socket.close()
-            self.connections.disconnect_all()
+            try:
+                self.holepuncher.clear()
+                self.udp_socket.close()
+                self.connections.disconnect_all()
+            except:
+                print("exception raised on close")
